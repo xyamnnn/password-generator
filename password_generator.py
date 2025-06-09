@@ -1,14 +1,13 @@
-#!/usr/bin/env python3
 """
 Password Generator & Manager
 Created by xyamnnn
 """
 
-import random
+import secrets
 import string
 import os
 import json
-from datetime import datetime
+import math
 from pathlib import Path
 
 class PasswordGenerator:
@@ -19,120 +18,70 @@ class PasswordGenerator:
         downloads_path.mkdir(exist_ok=True)
         
         self.default_settings = {
-            "length": 12,
-            "include_symbols": True,
-            "include_numbers": True,
-            "include_uppercase": True,
-            "include_lowercase": True
+            "length": 18, "include_symbols": True, "include_numbers": True,
+            "include_uppercase": True, "include_lowercase": True,
+            "include_extended_symbols": True
         }
-        
         self.settings = self.load_settings()
         
-    def generate_password(self, length=12, include_symbols=True, include_numbers=True, include_uppercase=True, include_lowercase=True):
-        """Ultra-random password generation with chaos algorithms"""
-        import time
-        import hashlib
+        self.basic_chars = string.ascii_letters + string.digits + "!@#$%^&*()_+-=[]{}|;:,.<>?~`"
+        self.extended_chars = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
+    
+    def format_crack_time(self, years):
+        if years < 1e12: return f"{years/1e9:.1f} billion years"
+        elif years < 1e15: return f"{years/1e12:.1f} trillion years"
+        elif years < 1e18: return f"{years/1e15:.1f} quadrillion years"
+        elif years < 1e21: return f"{years/1e18:.1f} quintillion years"
+        else: return f"{years:.2e} years"
+    
+    def generate_password(self, length=18, **options):
+        length = max(12, length)
         
-        # Seed with current time microseconds for true randomness
-        random.seed(int(time.time() * 1000000) % 2147483647)
+        chars = ""
+        required = []
         
-        symbols_basic = "!@#$%^&*"
-        symbols_extended = "()_+-=[]{}|;:,.<>?~`"
-        symbols_extra = "§±¿¡¢£¥€"
+        if options.get('include_lowercase', True):
+            chars += string.ascii_lowercase
+            required.append(secrets.choice(string.ascii_lowercase))
+        if options.get('include_uppercase', True):
+            chars += string.ascii_uppercase
+            required.append(secrets.choice(string.ascii_uppercase))
+        if options.get('include_numbers', True):
+            chars += string.digits
+            required.append(secrets.choice(string.digits))
+        if options.get('include_symbols', True):
+            symbols = "!@#$%^&*()_+-=[]{}|;:,.<>?~`"
+            chars += symbols
+            required.append(secrets.choice(symbols))
+        if options.get('include_extended_symbols', True):
+            chars += self.extended_chars
+            required.append(secrets.choice(self.extended_chars))
         
-        # Create character pools
-        pools = {}
-        if include_lowercase:
-            pools['lower'] = list(string.ascii_lowercase)
-        if include_uppercase:
-            pools['upper'] = list(string.ascii_uppercase)
-        if include_numbers:
-            pools['digits'] = list(string.digits)
-        if include_symbols:
-            pools['symbols1'] = list(symbols_basic)
-            pools['symbols2'] = list(symbols_extended)
-            pools['symbols3'] = list(symbols_extra)
+        if not chars: chars = self.basic_chars
         
-        if not pools:
-            pools['fallback'] = list(string.ascii_letters + string.digits)
+        remaining = length - len(required)
+        if remaining > 0:
+            password_list = required + [secrets.choice(chars) for _ in range(remaining)]
+        else:
+            password_list = required[:length]
         
-        # Generate password with maximum chaos
-        password = []
+        for i in range(len(password_list) - 1, 0, -1):
+            j = secrets.randbelow(i + 1)
+            password_list[i], password_list[j] = password_list[j], password_list[i]
         
-        # First pass: ensure at least one from each type
-        for pool_name, pool_chars in pools.items():
-            if len(password) < length:
-                # Multiple random selections and hash-based choice
-                temp_choices = [random.choice(pool_chars) for _ in range(5)]
-                hash_input = str(time.time() * random.random()).encode()
-                hash_val = int(hashlib.md5(hash_input).hexdigest()[:8], 16)
-                chosen_char = temp_choices[hash_val % len(temp_choices)]
-                password.append(chosen_char)
+        password = ''.join(password_list)
         
-        # Second pass: fill remaining with pure chaos
-        all_chars = []
-        for pool_chars in pools.values():
-            all_chars.extend(pool_chars)
-        
-        while len(password) < length:
-            # Triple randomization
-            method = random.randint(1, 4)
-            
-            if method == 1:
-                # Random pool selection
-                pool_name = random.choice(list(pools.keys()))
-                password.append(random.choice(pools[pool_name]))
-            elif method == 2:
-                # Hash-based selection
-                hash_input = str(random.random() * time.time()).encode()
-                hash_val = int(hashlib.md5(hash_input).hexdigest()[:8], 16)
-                password.append(all_chars[hash_val % len(all_chars)])
-            elif method == 3:
-                # Time-based selection
-                time_val = int(time.time() * 1000000) % len(all_chars)
-                password.append(all_chars[time_val])
-            else:
-                # Pure random
-                password.append(random.choice(all_chars))
-        
-        # Chaos shuffling with multiple algorithms
-        for _ in range(random.randint(5, 12)):
-            # Method 1: Standard shuffle
-            random.shuffle(password)
-            
-            # Method 2: Reverse random sections
-            if len(password) > 3:
-                start = random.randint(0, len(password) - 3)
-                end = random.randint(start + 2, len(password))
-                password[start:end] = password[start:end][::-1]
-            
-            # Method 3: Swap random positions
-            for _ in range(random.randint(2, 6)):
-                if len(password) > 1:
-                    i, j = random.sample(range(len(password)), 2)
-                    password[i], password[j] = password[j], password[i]
-        
-        # Final chaos: split and recombine randomly
-        if len(password) > 4:
-            split_points = sorted(random.sample(range(1, len(password)), random.randint(1, 3)))
-            sections = []
-            last_point = 0
-            for point in split_points + [len(password)]:
-                sections.append(password[last_point:point])
-                last_point = point
-            random.shuffle(sections)
-            password = [char for section in sections for char in section]
-        
-        return ''.join(password)
+        return password
     
     def load_settings(self):
         try:
             if self.settings_file.exists():
                 with open(self.settings_file, 'r') as f:
-                    saved_settings = json.load(f)
-                return saved_settings
-        except:
-            pass
+                    saved = json.load(f)
+                for key, value in self.default_settings.items():
+                    if key not in saved: saved[key] = value
+                return saved
+        except: pass
         return self.default_settings.copy()
     
     def save_settings(self):
@@ -140,188 +89,138 @@ class PasswordGenerator:
             with open(self.settings_file, 'w') as f:
                 json.dump(self.settings, f, indent=2)
                 f.flush()
-                os.fsync(f.fileno())
         except Exception as e:
-            print(f"Warning: Couldn't save settings: {e}")
+            print(f"Warning: {e}")
     
     def auto_open_notepad(self):
         try:
-            import platform
-            import subprocess
+            import platform, subprocess
             if platform.system() == "Windows":
-                subprocess.run(['taskkill', '/f', '/im', 'notepad.exe'], 
-                             capture_output=True, check=False)
-                subprocess.Popen(['notepad.exe', str(self.notes_file)], 
-                               creationflags=subprocess.CREATE_NEW_CONSOLE)
+                subprocess.run(['taskkill', '/f', '/im', 'notepad.exe'], capture_output=True, check=False)
+                subprocess.Popen(['notepad.exe', str(self.notes_file)], creationflags=subprocess.CREATE_NEW_CONSOLE)
             else:
-                print(f"File saved at: {self.notes_file}")
-        except Exception:
-            print(f"File saved at: {self.notes_file}")
+                print(f"File: {self.notes_file}")
+        except: print(f"File: {self.notes_file}")
     
     def view_passwords(self):
         if not os.path.exists(self.notes_file):
             print("No passwords saved yet!")
             return
-            
         try:
             with open(self.notes_file, "r", encoding="utf-8") as f:
                 content = f.read().strip()
-                
-            if not content:
+            if content:
+                print("\n" + "="*80)
+                print(content)
+                print("="*80)
+            else:
                 print("No passwords saved yet!")
-                return
-                
-            print("\nSaved Passwords:")
-            print("=" * 80)
-            print(content)
-            print("=" * 80)
-            
         except Exception as e:
-            print(f"Error reading passwords: {e}")
+            print(f"Error: {e}")
     
-    def update_password(self, label, new_password):
-        clean_label = label.strip()
-        new_entry = f"Username: {clean_label} Password: {new_password}\n"
+    def update_password(self, label, password):
+        entry = f"Username: {label.strip()} Password: {password}\n"
         
         if not os.path.exists(self.notes_file):
             with open(self.notes_file, "w", encoding="utf-8") as f:
-                f.write(new_entry)
-                f.flush()
+                f.write(entry)
             self.auto_open_notepad()
-            return True
+            return
             
         try:
             with open(self.notes_file, "r", encoding="utf-8") as f:
                 lines = f.readlines()
             
-            while lines and lines[0].strip() == "":
-                lines.pop(0)
-            
             updated = False
             for i, line in enumerate(lines):
                 if line.startswith("Username:"):
-                    existing_label = line.split("Username:")[1].split("Password:")[0].strip()
-                    if existing_label.lower() == clean_label.lower():
-                        lines[i] = new_entry
+                    existing = line.split("Username:")[1].split("Password:")[0].strip()
+                    if existing.lower() == label.strip().lower():
+                        lines[i] = entry
                         updated = True
                         break
             
-            if not updated:
-                lines.append(new_entry)
+            if not updated: lines.append(entry)
             
             with open(self.notes_file, "w", encoding="utf-8") as f:
                 f.writelines(lines)
-                f.flush()
-            
             self.auto_open_notepad()
-            return True
-            
         except Exception as e:
-            print(f"Error updating password: {e}")
-            return False
+            print(f"Error: {e}")
 
 def main():
-    generator = PasswordGenerator()
+    gen = PasswordGenerator()
     
     print("Password Generator & Manager")
-    print("=" * 30)
+    print("="*30)
     
     try:
         while True:
-            print("\nOptions:")
-            print("1. Generate new password")
-            print("2. View all passwords")
-            print("3. Update existing password")
-            print("4. Custom password settings")
+            print("\n1. Generate password")
+            print("2. View passwords")
+            print("3. Update password")
+            print("4. Settings")
             print("5. Exit")
             
-            choice = input("\nChoose an option (1-5): ").strip()
+            choice = input("\nChoice (1-5): ").strip()
             
-            if choice == "1":
-                label = input("Password for? ").strip()
+            if choice in ["1", "3"]:
+                label = input("Password for: ").strip()
                 if not label:
-                    print("Label cannot be empty!")
+                    print("Label required!")
                     continue
-                    
-                password = generator.generate_password(
-                    length=generator.settings["length"],
-                    include_symbols=generator.settings["include_symbols"],
-                    include_numbers=generator.settings["include_numbers"],
-                    include_uppercase=generator.settings["include_uppercase"],
-                    include_lowercase=generator.settings["include_lowercase"]
+                
+                password = gen.generate_password(
+                    length=gen.settings["length"],
+                    include_symbols=gen.settings["include_symbols"],
+                    include_numbers=gen.settings["include_numbers"],
+                    include_uppercase=gen.settings["include_uppercase"],
+                    include_lowercase=gen.settings["include_lowercase"],
+                    include_extended_symbols=gen.settings["include_extended_symbols"]
                 )
-                print(f"Generated: {password}")
-                generator.update_password(label, password)
-                generator.save_settings()
-                     
+                print(f"\nPassword: {password}")
+                gen.update_password(label, password)
+                gen.save_settings()
+                
             elif choice == "2":
-                generator.view_passwords()
-                 
-            elif choice == "3":
-                label = input("Update password for? ").strip()
-                if not label:
-                    print("Label cannot be empty!")
-                    continue
-                    
-                password = generator.generate_password(
-                    length=generator.settings["length"],
-                    include_symbols=generator.settings["include_symbols"],
-                    include_numbers=generator.settings["include_numbers"],
-                    include_uppercase=generator.settings["include_uppercase"],
-                    include_lowercase=generator.settings["include_lowercase"]
-                )
-                print(f"Generated: {password}")
-                generator.update_password(label, password)
-                generator.save_settings()
-                     
+                gen.view_passwords()
+                
             elif choice == "4":
-                print(f"\nCurrent: Length={generator.settings['length']}, Symbols={generator.settings['include_symbols']}")
+                print(f"\nCurrent length: {gen.settings['length']}")
                 try:
-                    length = int(input(f"Password length ({generator.settings['length']}): ") or str(generator.settings['length']))
-                    include_symbols = input(f"Include symbols? ({'y' if generator.settings['include_symbols'] else 'n'}): ").lower() != 'n'
-                    include_numbers = input(f"Include numbers? ({'y' if generator.settings['include_numbers'] else 'n'}): ").lower() != 'n'
-                    include_uppercase = input(f"Include uppercase? ({'y' if generator.settings['include_uppercase'] else 'n'}): ").lower() != 'n'
-                    include_lowercase = input(f"Include lowercase? ({'y' if generator.settings['include_lowercase'] else 'n'}): ").lower() != 'n'
+                    length = int(input(f"Length (min 12): ") or gen.settings['length'])
+                    symbols = input("Basic symbols (y/n): ").lower() != 'n'
+                    numbers = input("Numbers (y/n): ").lower() != 'n'
+                    upper = input("Uppercase (y/n): ").lower() != 'n'
+                    lower = input("Lowercase (y/n): ").lower() != 'n'
+                    extended = input("Extended symbols (y/n): ").lower() != 'n'
                     
-                    generator.settings = {
-                        "length": length,
-                        "include_symbols": include_symbols,
-                        "include_numbers": include_numbers,
-                        "include_uppercase": include_uppercase,
-                        "include_lowercase": include_lowercase
-                    }
+                    gen.settings.update({
+                        "length": max(12, length), "include_symbols": symbols,
+                        "include_numbers": numbers, "include_uppercase": upper,
+                        "include_lowercase": lower, "include_extended_symbols": extended
+                    })
                     
-                    generator.save_settings()
+                    gen.save_settings()
                     print("Settings saved!")
                     
-                    label = input("Password for? ").strip()
-                    if not label:
-                        print("Label cannot be empty!")
-                        continue
-                        
-                    password = generator.generate_password(
-                        length=length,
-                        include_symbols=include_symbols,
-                        include_numbers=include_numbers,
-                        include_uppercase=include_uppercase,
-                        include_lowercase=include_lowercase
-                    )
-                    
-                    print(f"Generated: {password}")
-                    generator.update_password(label, password)
+                    label = input("Generate password for: ").strip()
+                    if label:
+                        password = gen.generate_password(**gen.settings)
+                        print(f"\nPassword: {password}")
+                        gen.update_password(label, password)
                         
                 except ValueError:
-                    print("Invalid input! Please enter valid numbers.")
+                    print("Invalid input!")
                     
             elif choice == "5":
-                generator.save_settings()
+                gen.save_settings()
                 break
-                
             else:
-                print("Invalid choice! Please choose 1-5.")
-    
+                print("Invalid choice!")
+                
     except KeyboardInterrupt:
-        generator.save_settings()
+        gen.save_settings()
         print("\nGoodbye!")
 
 if __name__ == "__main__":
